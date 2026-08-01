@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/**
+ * Admin theme.
+ *
+ * Denser and cooler than the storefront on purpose: this is a tool for someone doing
+ * data entry for an hour, not a shopfront. Rows are tight and the accent colour is
+ * reserved for primary and destructive actions only.
+ */
+@theme {
+  --color-ink-50: #f6f7f9;
+  --color-ink-100: #eceef2;
+  --color-ink-200: #d8dce3;
+  --color-ink-400: #9aa3b2;
+  --color-ink-600: #5b6472;
+  --color-ink-800: #2c333d;
+  --color-ink-900: #1a1f26;
+
+  --color-accent-50: #eef4ff;
+  --color-accent-500: #3b6fd4;
+  --color-accent-600: #2f59ad;
+  --color-accent-700: #26478c;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-500: #dc2626;
+  --color-danger-600: #b91c1c;
+
+  --color-success-50: #f0fdf4;
+  --color-success-600: #16a34a;
+
+  --color-warn-50: #fffbeb;
+  --color-warn-600: #b45309;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-ink-50);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-600);
+  outline-offset: 2px;
+}

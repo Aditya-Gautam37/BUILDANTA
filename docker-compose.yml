@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: buildanta-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: buildanta
+      POSTGRES_PASSWORD: buildanta
+      POSTGRES_DB: buildanta
+    # 5433 on the host to avoid colliding with an existing local Postgres.
+    ports:
+      - "5433:5432"
+    volumes:
+      - buildanta-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buildanta -d buildanta"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  buildanta-pgdata:

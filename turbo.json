@@ -1,0 +1,38 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [".env", "eslint.config.mjs"],
+  "globalEnv": [
+    "NODE_ENV",
+    "DATABASE_URL",
+    "DIRECT_URL",
+    "API_URL",
+    "API_PORT",
+    "API_HOST",
+    "CORS_ORIGINS",
+    "TRUST_PROXY",
+    "SESSION_SECRET",
+    "SESSION_COOKIE_NAME",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_STORAGE_BUCKET",
+    "DEFAULT_CURRENCY"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "typecheck": {},
+    "lint": {},
+    "test": {
+      "outputs": []
+    },
+    "test:e2e": {
+      "cache": false
+    }
+  }
+}

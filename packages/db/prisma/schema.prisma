@@ -1,0 +1,439 @@
+// Buildanta — Release 1 data model: catalog plus bulk quote requests.
+//
+// Rules this schema follows:
+//   * Nothing models stock, orders, carts, payments or warehouses. Those arrive
+//     in Releases 2-4 and get their own tables. No column is added "just in
+//     case" — unused nullable columns are how the previous schema drifted.
+//   * Money is Decimal(12,2) with an explicit currency. Never Float.
+//   * Records are retired with a status or isActive flag, not deleted, so later
+//     releases can still reference what a customer was quoted.
+//   * Every foreign key and every column used for filtering or sorting is
+//     indexed. Every user-facing lookup key is a unique slug.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (e.g. Supabase's PgBouncer transaction-mode pooler) for
+  // normal app queries.
+  url       = env("DATABASE_URL")
+  // Direct, non-pooled connection for `prisma migrate`. Transaction-mode pooling
+  // does not reliably support the prepared statements migrations need. Prisma
+  // requires this variable to be set whenever `directUrl` is present in the
+  // schema — for a plain local Postgres with no pooler, .env.example sets it to
+  // the same value as DATABASE_URL, which is the correct behaviour there (there
+  // is only one real connection either way).
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Admin identity
+// ---------------------------------------------------------------------------
+
+/// Release 1 has exactly one role: a staff member who can edit the catalog and
+/// work the quote inbox. Granular permissions are deliberately deferred.
+enum AdminRole {
+  ADMIN
+}
+
+model AdminUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  /// Argon2id hash. Never a plaintext or reversible value.
+  passwordHash String
+  name         String
+  role         AdminRole @default(ADMIN)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions       AdminSession[]
+  quotesAssigned QuoteRequest[] @relation("QuoteAssignee")
+
+  @@map("admin_users")
+}
+
+/// Server-side sessions. The cookie carries an opaque random token; only its
+/// SHA-256 is stored, so a database leak cannot be replayed as a login. Deleting
+/// the row logs the user out immediately.
+model AdminSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  tokenHash   String   @unique
+  adminUserId String   @db.Uuid
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([expiresAt])
+  @@map("admin_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Taxonomy
+// ---------------------------------------------------------------------------
+// The live prototype hardcoded these menus in three places and they drifted
+// apart — the homepage advertised ten build stages while the footer listed seven,
+// and three different category lists were in circulation. Storing them once here
+// and generating every menu from this data is what makes that class of bug
+// impossible rather than merely fixed.
+
+/// Nested product categories, e.g. Electrical > Wires & Cables.
+model Category {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  parentId    String?  @db.Uuid
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+  @@index([isActive, sortOrder])
+  @@map("categories")
+}
+
+model Brand {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  logoUrl     String?
+  websiteUrl  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+
+  @@index([isActive, name])
+  @@map("brands")
+}
+
+/// A room or area of a building, e.g. Bathroom, Balcony & Terrace. Buildanta
+/// browses by room, so this is first-class rather than a tag.
+model Room {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[] @relation("ProductRooms")
+
+  @@index([isActive, sortOrder])
+  @@map("rooms")
+}
+
+/// A phase of a build, e.g. Foundation & Structure, Paint & Finishing.
+/// `sortOrder` carries the real chronological order of the work on site, which is
+/// what the storefront's stage navigation is ordered by.
+model ConstructionStage {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[] @relation("ProductStages")
+
+  @@index([isActive, sortOrder])
+  @@map("construction_stages")
+}
+
+// ---------------------------------------------------------------------------
+// Suppliers
+// ---------------------------------------------------------------------------
+
+/// Release 1 keeps supplier records only — who supplies a variant. Purchase
+/// orders and goods receipts are Release 3. Seller self-onboarding is Release 4.
+model Supplier {
+  id           String   @id @default(uuid()) @db.Uuid
+  slug         String   @unique
+  name         String
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  region       String?
+  postalCode   String?
+  country      String?
+  notes        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  variants ProductVariant[]
+
+  @@index([isActive, name])
+  @@map("suppliers")
+}
+
+// ---------------------------------------------------------------------------
+// Products
+// ---------------------------------------------------------------------------
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/// The unit a construction product is sold in. Cement by the bag, steel by the
+/// tonne, tile by the box, wire by the roll. Getting this wrong is the classic
+/// construction-catalog bug, so it is an enum on the variant, not free text.
+enum SalesUnit {
+  PIECE
+  BAG
+  BOX
+  BUNDLE
+  ROLL
+  SHEET
+  METRE
+  SQUARE_METRE
+  CUBIC_METRE
+  LITRE
+  KILOGRAM
+  TONNE
+}
+
+/// A product is the editorial record: name, copy, taxonomy, images. It is never
+/// itself purchasable — only its variants carry SKU and price.
+model Product {
+  id             String        @id @default(uuid()) @db.Uuid
+  slug           String        @unique
+  name           String
+  summary        String?
+  description    String?
+  status         ProductStatus @default(DRAFT)
+  categoryId     String        @db.Uuid
+  brandId        String?       @db.Uuid
+  /// Specification table rendered on the product page, e.g.
+  /// { "Grade": "53", "Setting time": "30 min" }.
+  specifications Json          @default("{}")
+  publishedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  /// --- Denormalized price summary, derived from active variants. ---
+  /// The one denormalization in this schema, and a deliberate one: "sort by
+  /// price" and "filter by price range" operate on the minimum active variant
+  /// price, which Prisma cannot express as a relation aggregate. The alternative
+  /// was hand-written SQL duplicating every filter clause.
+  /// Never written directly — `recomputeProductPricing()` in
+  /// packages/api/src/pricing.ts is the only writer, and it runs in the same
+  /// transaction as any variant change.
+  minPrice           Decimal? @db.Decimal(12, 2)
+  maxPrice           Decimal? @db.Decimal(12, 2)
+  priceCurrency      String?  @db.Char(3)
+  activeVariantCount Int      @default(0)
+
+  category Category            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand    Brand?              @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  rooms    Room[]              @relation("ProductRooms")
+  stages   ConstructionStage[] @relation("ProductStages")
+  variants ProductVariant[]
+  images   ProductImage[]
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([status, publishedAt])
+  @@index([status, minPrice])
+  @@index([name])
+  @@map("products")
+}
+
+/// The purchasable unit: one SKU, one price, one pack size.
+model ProductVariant {
+  id         String    @id @default(uuid()) @db.Uuid
+  productId  String    @db.Uuid
+  sku        String    @unique
+  name       String
+  /// Distinguishing attributes, e.g. { "Diameter": "12 mm" }. Structured
+  /// variant-option tables are deferred; Release 1 needs display and filtering.
+  attributes Json      @default("{}")
+  price      Decimal   @db.Decimal(12, 2)
+  /// ISO 4217, stored per variant so a later multi-currency release does not
+  /// need a migration of historical prices.
+  currency   String    @default("INR") @db.Char(3)
+  unit       SalesUnit @default(PIECE)
+  /// How many `unit`s one SKU contains, e.g. a pallet of 40 bags.
+  packSize   Decimal?  @db.Decimal(12, 3)
+  weightKg   Decimal?  @db.Decimal(12, 3)
+  lengthMm   Int?
+  widthMm    Int?
+  heightMm   Int?
+  supplierId String?   @db.Uuid
+  /// Shown first on the product page and used for the "from" price.
+  isDefault  Boolean   @default(false)
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  product    Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier   Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  images     ProductImage[]
+  quoteItems QuoteRequestItem[]
+
+  @@index([productId])
+  @@index([supplierId])
+  @@index([isActive, price])
+  @@map("product_variants")
+}
+
+/// Uploaded product imagery. `variantId` is optional: an image either belongs to
+/// the product generally or illustrates one specific variant.
+model ProductImage {
+  id         String   @id @default(uuid()) @db.Uuid
+  productId  String   @db.Uuid
+  variantId  String?  @db.Uuid
+  /// Public URL. Local disk in Release 1, object storage later — this column does
+  /// not change either way.
+  url        String
+  /// Storage key, kept so the file can be deleted when the row is.
+  storageKey String
+  altText    String?
+  width      Int?
+  height     Int?
+  byteSize   Int?
+  sortOrder  Int      @default(0)
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([productId, sortOrder])
+  @@index([variantId])
+  @@map("product_images")
+}
+
+// ---------------------------------------------------------------------------
+// Bulk quote requests
+// ---------------------------------------------------------------------------
+// The live prototype advertises "Get Bulk Quotes" as a headline feature and has
+// no form behind it. This is that feature, and it stops short of being an order:
+// a quote request captures what a buyer wants and who they are, and nothing
+// here reserves stock, prices a total or takes payment.
+
+enum QuoteStatus {
+  /// Submitted by a visitor, not yet looked at.
+  NEW
+  /// A staff member is working it.
+  IN_REVIEW
+  /// A quote has been sent back to the buyer.
+  QUOTED
+  /// Buyer accepted; becomes an order in Release 2.
+  WON
+  /// Buyer declined or went elsewhere.
+  LOST
+  /// Spam or a duplicate.
+  CLOSED
+}
+
+model QuoteRequest {
+  id        String      @id @default(uuid()) @db.Uuid
+  /// Short human-readable handle used in email and on the phone, e.g. "BQ-1042".
+  /// A UUID is unusable for that; the sequence is what makes this readable.
+  reference String      @unique
+  status    QuoteStatus @default(NEW)
+
+  contactName  String
+  contactEmail String
+  contactPhone String?
+  companyName  String?
+
+  /// Free-text project context: site location, timeline, tolerances.
+  projectName     String?
+  deliveryPincode String?
+  message         String?
+
+  /// Buyer's target date, if given. Not a promise by Buildanta.
+  requiredBy DateTime?
+
+  /// Internal notes, never shown to the buyer.
+  internalNotes String?
+  assignedToId  String?   @db.Uuid
+  respondedAt   DateTime?
+
+  /// Kept for abuse investigation and rate-limit forensics, not analytics.
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedTo AdminUser?         @relation("QuoteAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  items      QuoteRequestItem[]
+
+  @@index([status, createdAt])
+  @@index([assignedToId])
+  @@index([contactEmail])
+  @@map("quote_requests")
+}
+
+/// One line of a quote request.
+model QuoteRequestItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  quoteRequestId String  @db.Uuid
+  variantId      String? @db.Uuid
+
+  /// Product name, SKU, unit and price are copied in at submission time.
+  ///
+  /// This is not redundancy: it is what the buyer actually asked for at the
+  /// price they actually saw. A variant can be renamed, repriced or deactivated
+  /// afterwards, and the request must still say what was requested. `variantId`
+  /// stays as a soft link and goes null if the variant is ever deleted.
+  productName  String
+  variantName  String
+  sku          String
+  unit         SalesUnit
+  /// Unit price as displayed when the request was submitted.
+  unitPrice    Decimal   @db.Decimal(12, 2)
+  currency     String    @db.Char(3)
+  quantity     Decimal   @db.Decimal(12, 3)
+  /// Buyer's note for this line, e.g. "shade must match block A".
+  note         String?
+
+  createdAt DateTime @default(now())
+
+  quoteRequest QuoteRequest    @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  variant      ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([quoteRequestId])
+  @@index([variantId])
+  @@map("quote_request_items")
+}
+
+/// Backing sequence for `QuoteRequest.reference`.
+///
+/// A dedicated one-row-per-year counter rather than a database sequence, because
+/// references restart each year ("BQ-2026-0001") and a Postgres sequence cannot
+/// be reset transactionally alongside the insert.
+model QuoteReferenceCounter {
+  year      Int      @id
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("quote_reference_counters")
+}
