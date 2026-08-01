@@ -131,6 +131,11 @@ and why they're kept separate from `pnpm verify`.
   why tRPC end-to-end instead of a separate REST tier.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — workflow, schema changes, testing
   expectations.
+- **[docs/project-context.md](docs/project-context.md)** — the business's target
+  product: website plus inventory management. The vision, not the current state.
+- **[docs/inventory-gap-analysis.md](docs/inventory-gap-analysis.md)** — that
+  vision measured against this repository, plus a phased plan. Start here to
+  understand what is and is not built.
 - **[docs/requirements.md](docs/requirements.md)** — the Release 1 user
   stories and their acceptance criteria.
 - **[docs/database.md](docs/database.md)** — every non-obvious column, and
