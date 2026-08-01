@@ -36,6 +36,12 @@ Thumbs.db
 
 coverage/
 
+# Dead local-disk upload directory from before images moved to Supabase
+# Storage. No code writes here any more, but a stale tree survived the switch on
+# at least one machine and was picked up by `git add -A` — an uploaded product
+# image committed as a binary blob. Ignored so that cannot recur.
+/apps/api/storage/
+
 # Playwright — reports, traces, and the saved login session (a live cookie,
 # never something to commit even though it's not a ".env"-shaped secret).
 playwright-report/
