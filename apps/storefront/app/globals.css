@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/**
+ * Buildanta storefront theme.
+ *
+ * A construction catalog gets read in bright daylight on a phone at a site, so the
+ * palette is high-contrast and the type runs larger than a typical consumer store.
+ * Colours are tokens here rather than repeated as utility literals, so the visual
+ * direction can be adjusted in one place.
+ */
+@theme {
+  --color-concrete-50: #f7f7f5;
+  --color-concrete-100: #eeeeea;
+  --color-concrete-200: #dcdcd4;
+  --color-concrete-400: #a3a399;
+  --color-concrete-600: #6b6b62;
+  --color-concrete-800: #3a3a35;
+  --color-concrete-900: #22221f;
+
+  --color-signal-50: #fff7ed;
+  --color-signal-100: #ffedd5;
+  --color-signal-500: #f26b21;
+  --color-signal-600: #dd5511;
+  --color-signal-700: #b8440e;
+
+  --color-steel-600: #2f4a5c;
+  --color-steel-700: #233947;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-concrete-50);
+  color: var(--color-concrete-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Visible keyboard focus everywhere. Removing outlines for aesthetics is what
+   makes a filter panel unusable without a mouse. */
+:focus-visible {
+  outline: 2px solid var(--color-signal-600);
+  outline-offset: 2px;
+}

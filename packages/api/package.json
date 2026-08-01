@@ -1,0 +1,31 @@
+{
+  "name": "@buildanta/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:integration": "dotenv -e ../../.env -- vitest run --config vitest.integration.config.ts",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@buildanta/auth": "workspace:*",
+    "@buildanta/db": "workspace:*",
+    "@supabase/supabase-js": "^2.47.10",
+    "@trpc/client": "^11.0.0",
+    "@trpc/server": "^11.0.0",
+    "sharp": "^0.33.5",
+    "superjson": "^2.2.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^7.4.4",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

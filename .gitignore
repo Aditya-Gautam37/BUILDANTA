@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+.next/
+out/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# environment — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# Claude Code's per-machine settings. Ignored not just as local noise: the
+# permission entries record whole approved commands verbatim, so any secret that
+# ever appeared on a command line (a service-role key in a curl header, for
+# instance) is sitting in this file in plain text.
+.claude/settings.local.json
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+coverage/
+
+# Dead local-disk upload directory from before images moved to Supabase
+# Storage. No code writes here any more, but a stale tree survived the switch on
+# at least one machine and was picked up by `git add -A` — an uploaded product
+# image committed as a binary blob. Ignored so that cannot recur.
+/apps/api/storage/
+
+# Playwright — reports, traces, and the saved login session (a live cookie,
+# never something to commit even though it's not a ".env"-shaped secret).
+playwright-report/
+test-results/
+/apps/e2e/.auth/
