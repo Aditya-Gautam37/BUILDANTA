@@ -111,8 +111,15 @@ which its own `playwright.config.ts` starts or reuses automatically).
 
 Following `BUILD_FROM_SCRATCH.md` §13:
 
+`pnpm verify` is enforced automatically on every pull request and on pushes to
+`main` by `.github/workflows/verify.yml`. The two steps below that need real
+infrastructure — `pnpm test:integration` and `pnpm test:e2e` — are **required
+pre-deployment gates that CI does not run**, because the public PR workflow
+holds no credentials by design (see `docs/testing.md`). Someone has to run them,
+or a manually-dispatched workflow bound to a protected environment does.
+
 ```text
-pnpm verify (lint, typecheck, unit tests, build)
+pnpm verify (lint, typecheck, unit tests, build)  ← automated in CI
   → deploy database migration (prisma migrate deploy)
   → confirm the target environment's Supabase Storage bucket and credentials
     are genuinely separate from every other environment's

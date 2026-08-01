@@ -151,8 +151,43 @@ The draft/publish/archive boundary and the auth boundary are now covered by
 
 ## CI
 
-Not yet configured. When it is, it should run `pnpm verify`
-(`lint && typecheck && test && build`) — see `CONTRIBUTING.md` — plus
-`pnpm test:integration` and `pnpm test:e2e` against a dedicated test database
-and its **own** Supabase project, never a shared one: the storage tests upload
-and delete real objects, and `test:integration` writes real rows.
+**What CI runs today:** `.github/workflows/verify.yml` runs `pnpm verify`
+(lint, typecheck, unit tests, build) on every pull request and on pushes to
+`main`. It needs **no secrets**, reaches no external service, and is granted
+only `contents: read`. Node comes from `engines.node`'s declared floor and pnpm
+from `packageManager`; install uses `--frozen-lockfile` with the pnpm store
+cached.
+
+The one env it sets is a pair of throwaway `postgresql://user:pass@localhost`
+placeholders, because Prisma resolves `env()` in the datasource block even for
+`generate` (it fails with P1012 otherwise) — nothing connects, and no database
+exists in that job.
+
+### Required pre-deployment checks — NOT in CI
+
+`pnpm test:integration` and `pnpm test:e2e` are **deliberately excluded** from
+the public PR workflow. Both need a real migrated database and a real Supabase
+Storage bucket, which means real credentials, and `pull_request` runs on forks:
+putting those secrets in this workflow would hand every fork author write access
+to that infrastructure.
+
+They are not optional, though. **Both must pass before any deploy**, run by hand
+or by a protected workflow, against an environment whose database and Supabase
+project belong to that environment alone:
+
+| Check | Command | Needs |
+|---|---|---|
+| Router + storage integration | `pnpm test:integration` | migrated database, Supabase Storage bucket |
+| Full browser end-to-end | `pnpm test:e2e` | the above, plus all three apps running |
+
+Never point either at a shared or production project: `test:integration` writes
+real rows, and the storage tests upload and delete real objects. Note also that
+objects the storage tests delete stay in Supabase's CDN cache for the
+`cacheControl` TTL — see `docs/known-issues.md` KI-1 — which is another reason
+a throwaway project per environment matters.
+
+**When these are automated**, they belong in a separate workflow that is
+manually dispatched (`workflow_dispatch`) and bound to a protected GitHub
+**environment**, so its secrets are unavailable to `pull_request` runs and to
+forks, and can require a reviewer before they are released to the job.
+`docs/deployment.md` lists both commands in the deploy sequence.

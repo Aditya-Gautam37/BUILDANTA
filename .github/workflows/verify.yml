@@ -1,0 +1,67 @@
+name: verify
+
+# Static verification only — lint, typecheck, unit tests, build. This runs on
+# every pull request from anyone, including forks, so it is built to need no
+# secrets at all and to reach no external service.
+#
+# Deliberately NOT here: `pnpm test:integration` and `pnpm test:e2e`. Both need
+# a real migrated database and a real Supabase Storage bucket, which means real
+# credentials; exposing those to a public PR workflow would hand every fork
+# author write access to that infrastructure. They are required pre-deployment
+# checks instead — see docs/testing.md and docs/deployment.md — and belong in a
+# separate manually-triggered workflow backed by a protected GitHub environment.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Read-only: this workflow never writes to the repository, publishes anything,
+# or comments on a pull request.
+permissions:
+  contents: read
+
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    env:
+      # Prisma resolves `env()` in the datasource block even for `generate`,
+      # which never opens a connection — measured: without these it fails with
+      # P1012 "Environment variable not found: DIRECT_URL". These are throwaway
+      # placeholders pointing at nothing. No database is reachable from this
+      # job and none is required. They are intentionally not secrets, and are
+      # the same dummy values the unit tests already use.
+      DATABASE_URL: postgresql://user:pass@localhost:5432/db
+      DIRECT_URL: postgresql://user:pass@localhost:5432/db
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Takes the pnpm version from package.json's "packageManager" field
+      # (pnpm@9.0.6) rather than pinning it a second time here, so there is one
+      # place to change it.
+      - uses: pnpm/action-setup@v4
+
+      # engines.node is ">=20.11" and the repository ships no .nvmrc, so CI runs
+      # that declared floor. If the code starts needing a newer Node, this fails
+      # here rather than on the machine of whoever installed the minimum.
+      # Must come after pnpm/action-setup: `cache: pnpm` needs pnpm on PATH to
+      # resolve the store directory.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.11"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # typecheck and build both need the generated Prisma client. `generate`
+      # only reads the schema and writes types — it does not connect.
+      - name: Generate Prisma client
+        run: pnpm --filter @buildanta/db exec prisma generate
+
+      - run: pnpm verify
