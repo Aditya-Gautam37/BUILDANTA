@@ -219,14 +219,17 @@ Products and variants can be connected to one or more suppliers.
   drafts; **cannot** change stock or purchase prices
 - **Sales staff** — review quotation requests; prepare customer quotations; view
   selling prices and availability; reserve inventory
+- **Finance** *(added by D6)* — **read-only**: purchase costs, GST, inventory
+  valuation and financial reports. Cannot create or edit catalogue data, selling
+  prices, suppliers, purchases or stock transactions
 - **Customer** — browse products; request quotations; save products; track
   enquiries and orders
 
 **All protected permissions must be checked by the server, not only hidden in
 the interface.** The binding, procedure-by-procedure matrix is
-[permissions-matrix.md](permissions-matrix.md); see also decision **D2** in §20,
-and the open question that document raises about the *procurement* and *finance*
-role names.
+[permissions-matrix.md](permissions-matrix.md); see also decisions **D2** and
+**D6** in §20. Checks are **capability-based** — no code branches on a role
+name.
 
 ## 15. Image management
 
@@ -325,6 +328,23 @@ or inventory manager** may override that, and every override requires:
 
 An override is a deliberate, attributable act, and the audit entry is part of the
 same transaction as the movement it permits.
+
+### D6 — Six roles, with a read-only Finance role, and capability-based checks
+
+The role list in §14 is extended by a sixth role: **Finance**, with **read-only**
+access to purchase costs, GST, inventory valuation and financial reports.
+
+Finance may **not** create or edit catalogue data, selling prices, suppliers,
+purchases or stock transactions. Administrator retains full access. Inventory
+manager handles procurement and inventory operations — the "procurement" function
+D2 refers to.
+
+Authorization is **capability-based**: a role is a named set of permissions, and
+no code branches on a role name. Adding or re-shaping a role is therefore a data
+change, not an edit to every procedure. This is what made Finance cheap to add,
+and it is a binding constraint on the implementation, not a style preference.
+
+The full grid is in [permissions-matrix.md](permissions-matrix.md).
 
 ### D5 — Tax is explicit: HSN/SAC and GST at product level, variant override
 

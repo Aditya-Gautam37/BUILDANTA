@@ -20,10 +20,11 @@ low-stock concept, and no inventory valuation. Sections 7, 17 and most of 5 of
 the context document are greenfield.
 
 The second structural gap is **roles**. `enum AdminRole` has exactly one value,
-`ADMIN`. The context document describes five roles with genuinely different
-capabilities — notably a catalogue editor who must *not* see purchase prices or
-change stock. That is an authorization model, and retrofitting one after the
-procedures exist is materially harder than building it with them.
+`ADMIN`. The target is six roles with genuinely different capabilities — a
+catalogue editor who must *not* see purchase prices or change stock, and a
+read-only finance role that may see cost but change nothing (D6). That is an
+authorization model, and retrofitting one after the procedures exist is materially
+harder than building it with them, which is why it is Phase 1.
 
 A useful way to hold it: the current system answers *"what do we sell?"*. The
 target system also answers *"what do we have, what did it cost, and who touched
@@ -65,7 +66,9 @@ it?"* — and that second question is what the inventory dashboard is for.
 | Inventory audit history (§19.13) | No table |
 | Inventory valuation (§7, §17) | Impossible today: needs both stock quantity and purchase price, neither of which exists |
 | 11 reports (§17) | None; and most are unanswerable until stock and purchase price exist |
-| Five roles (§14) | `AdminRole` has one value |
+| Six roles (§14 + D6) | `AdminRole` has one value, `ADMIN`. Needs five admin roles plus a capability layer; `CUSTOMER` is a separate model |
+| Capability-based authorization (D6) | No capability concept exists — `adminProcedure` is a single all-or-nothing gate |
+| Cost-field redaction (D2) | `serializers.ts` shapes every payload but has no notion of a caller, so it cannot yet omit fields per role |
 | Customer accounts (§14) | No customer user model — quotes are submitted anonymously |
 | PIN-code availability (§2, §11) | No service-area or pincode model |
 | Calculators (§16) | Not built |
@@ -135,27 +138,40 @@ reconciliation a first-class deliverable rather than a debugging tool — but it
 means Phase 2 carries the balance table, its transactional maintenance and the
 rebuild-and-verify path together. Sequencing below reflects that.
 
-**One open question, blocking Phase 1 only.** D2 grants access to "procurement"
-and "finance" roles, which are not among the five roles in §14. The mapping I
-have assumed — procurement = inventory manager, finance = administrator — and the
-alternative of adding a genuine sixth Finance role are set out in
-[permissions-matrix.md](permissions-matrix.md) §1. Confirm before Phase 1 starts,
-because it decides the role enum, and a separation-of-duties boundary is
-expensive to introduce after the procedures exist.
+**D6, added 2026-08-02, resolves the role question that was blocking Phase 1.**
+The mismatch between D2's "procurement and finance" wording and the original
+five-role list is settled in favour of a genuine sixth role:
+
+- **`FINANCE`** — read-only on purchase costs, GST, inventory valuation and
+  financial reports. No catalogue, selling-price, supplier, purchase or stock
+  writes.
+- **`INVENTORY_MANAGER`** is the procurement function D2 refers to.
+- **`ADMINISTRATOR`** retains full access.
+
+This is the separation-of-duties answer rather than the convenient one: the person
+who verifies cost is not the person who sets it. Nothing blocks Phase 1 now.
 
 **Now specified in full:** [permissions-matrix.md](permissions-matrix.md) — the
-capability set, the role-by-capability grid, every existing procedure mapped to
-the capability it will require, the six enforcement rules and the test
-obligations.
+capability set, the role-by-capability grid for all five admin roles, every
+existing procedure mapped to the capability it will require, seven enforcement
+rules and the test obligations.
+
+**Authorization is capability-based** (D6): roles are named sets of permissions
+and no code branches on a role name. That constraint is why `FINANCE` cost one
+capability-set entry rather than an edit to every cost-touching procedure — and
+it is the reason the next role will be cheap too.
 
 ### Phase 1 — Roles, capabilities and field-level redaction
 
 First, because every later phase asks "may this person do this?", and adding that
-question afterwards means revisiting every procedure. Blocked only on the
-role-naming confirmation above.
+question afterwards means revisiting every procedure. **Nothing blocks this now.**
 
-- Extend `AdminRole` to the approved roles; add the capability map from
-  `permissions-matrix.md` §3
+- Extend `AdminRole` to the five admin roles from D6, and add the capability map
+  from `permissions-matrix.md` §3 as the *only* place a role name appears
+  alongside the enum
+- **No role-name branching anywhere else** — enforced by a static check in the
+  test suite, not by convention, since this is the property that keeps the matrix
+  maintainable
 - Enforce in `packages/api/src/trpc.ts` as capability-declaring procedure
   builders, so a procedure **cannot be written without declaring** what it needs,
   and a missing declaration fails at startup rather than defaulting to open
