@@ -136,6 +136,10 @@ and why they're kept separate from `pnpm verify`.
 - **[docs/inventory-gap-analysis.md](docs/inventory-gap-analysis.md)** — that
   vision measured against this repository, plus a phased plan. Start here to
   understand what is and is not built.
+- **[docs/permissions-matrix.md](docs/permissions-matrix.md)** — the binding
+  role and capability model: every admin procedure mapped to the capability it
+  requires, and the rule that cost data is redacted from payloads rather than
+  hidden in the UI.
 - **[docs/requirements.md](docs/requirements.md)** — the Release 1 user
   stories and their acceptance criteria.
 - **[docs/database.md](docs/database.md)** — every non-obvious column, and

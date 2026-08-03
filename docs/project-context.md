@@ -223,7 +223,10 @@ Products and variants can be connected to one or more suppliers.
   enquiries and orders
 
 **All protected permissions must be checked by the server, not only hidden in
-the interface.**
+the interface.** The binding, procedure-by-procedure matrix is
+[permissions-matrix.md](permissions-matrix.md); see also decision **D2** in §20,
+and the open question that document raises about the *procurement* and *finance*
+role names.
 
 ## 15. Image management
 
@@ -276,7 +279,63 @@ Prices should state whether GST and transportation are included.
 Cart, online payment, logistics automation and a professional marketplace can be
 added after the core catalogue and quotation workflow is operating reliably.
 
-## 20. Success definition
+## 20. Approved architecture decisions
+
+Ratified by the business on 2026-08-02. These are **binding** — they resolve the
+open questions that the earlier sections left implicit, and they override any
+looser reading of §6, §7, §13 or §14. Implementation rationale and phasing are in
+[inventory-gap-analysis.md](inventory-gap-analysis.md).
+
+### D1 — Stock is an immutable ledger with a maintained balance table
+
+An immutable stock-movement ledger is the **single source of truth**. A
+current-balance table is maintained **in the same transaction** as every movement,
+purely to make reads fast. Balances are therefore a cache, never an authority.
+
+Reconciliation is a required deliverable, not an afterthought: the system must be
+able to **rebuild** balances from the ledger and **verify** the stored balances
+against that rebuild, reporting any divergence. Ledger rows are append-only —
+corrections are new compensating movements, never edits or deletes.
+
+### D2 — Purchase prices and valuation are access-controlled at the API layer
+
+Purchase price and stock valuation are **sensitive**. Access is enforced **in the
+API**, for the owner/super-admin, procurement and finance roles only. UI hiding is
+not a control and must never be the only barrier: a field the caller may not read
+must not appear in the response payload at all.
+
+### D3 — Every variant has a base inventory unit, with exact Decimal conversion
+
+Each variant declares a **base inventory unit**. Purchasing and selling units
+convert into that base unit by **exact Decimal conversion factors** — one pallet
+may equal 50 bags. Stock is held and compared in base units.
+
+**Floating-point arithmetic is prohibited** anywhere in this path, matching the
+rule already applied to money throughout this codebase. Conversion factors are
+stored as `Decimal`, and rounding behaviour must be explicit wherever a
+conversion cannot be exact.
+
+### D4 — Negative stock is prohibited by default and overrides are audited
+
+Stock may not fall below zero. Only an **explicitly authorized owner/super-admin
+or inventory manager** may override that, and every override requires:
+
+- a **mandatory reason** — not an optional note
+- an **immutable audit entry** recording who, when, what, and why
+
+An override is a deliberate, attributable act, and the audit entry is part of the
+same transaction as the movement it permits.
+
+### D5 — Tax is explicit: HSN/SAC and GST at product level, variant override
+
+**HSN/SAC code and GST rate are stored on the product**, with an **optional
+variant-level override** for exceptions.
+
+All stored prices are **tax-exclusive**. GST is **calculated explicitly** wherever
+it is shown or totalled — quotes, purchases and reports — never inferred from a
+tax-inclusive figure and never folded into a stored price.
+
+## 21. Success definition
 
 The initial Buildanta platform will be successful when an authorized staff
 member can create or edit a product — including its category, variants, images,
